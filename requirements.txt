@@ -4,3 +4,4 @@ requests
 openpyxl
 pillow
 requests
+plotly
