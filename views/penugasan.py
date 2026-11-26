@@ -413,12 +413,7 @@ def penugasan_guru():
     # ---------- Input ----------
     with st.container(border=True, key="card_penugasan_input"):
         st.markdown("### Input Penugasan")
-        st.caption(
-            "Tabel ini berisi penugasan yang tersimpan di database (sama dengan "
-            "yang dipakai bot). Tambah lewat form di bawah tabel; untuk menghapus, "
-            "centang kolom Pilih lalu klik Hapus terpilih. Perubahan langsung "
-            "disimpan. Aturan pecah JP: 5 = 3+2, 4 = 2+2, 3 = 3 (atau 2+1), 2 = 2."
-        )
+        
 
         if st.session_state.get("_pen_dilewati"):
             st.warning(
@@ -567,10 +562,6 @@ def penugasan_guru():
         if dobel:
             st.warning("Penugasan ganda untuk: " + ", ".join(dobel))
 
-        st.caption(
-            "Auto Plot menyusun ulang seluruh jadwal dari semua penugasan di "
-            "tabel. Saat diterapkan, jadwal lama diganti seluruhnya."
-        )
 
         if tugas:
             pesan_kap, total_slot, per_kelas, nama_kelas = _cek_kapasitas(tugas, slot_hari)
