@@ -1,7 +1,7 @@
 import html
 import streamlit as st
 from services.gas_client import get_data
-from views import admin, guru, siswa
+from views import admin, guru, siswa, penugasan
 
 
 
@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 
-ADMIN_PASSWORD = "admin"
+ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "admin")
 
 
 
@@ -560,11 +560,7 @@ if "role" not in st.session_state:
 if "user" not in st.session_state:
     st.session_state.user = None
 
-if "admin_mode" not in st.session_state:
-    st.session_state.admin_mode = False
 
-if "show_admin_login" not in st.session_state:
-    st.session_state.show_admin_login = False
 
 
 # HEADER
@@ -617,131 +613,199 @@ def page_heading(title, subtitle, icon="▦"):
 
 
 # LOGIN GURU DAN SISWA
+def _login_siswa_guru():
+    st.markdown(
+        '<div class="login-subtitle" style="margin-bottom:.8rem;">'
+        'Masukkan NISN untuk siswa atau NIP untuk guru.</div>',
+        unsafe_allow_html=True
+    )
+
+    with st.form("login_form"):
+        identifier = st.text_input(
+            "NISN / NIP",
+            placeholder="Masukkan NISN atau NIP",
+            key="login_identifier",
+            max_chars=20
+        )
+        submitted = st.form_submit_button(
+            "Masuk ke Dashboard →",
+            type="primary",
+            use_container_width=True
+        )
+
+    if not submitted:
+        return
+
+    normalized = identifier.strip()
+
+    if not normalized:
+        st.error("NISN atau NIP wajib diisi.")
+        return
+
+    if not normalized.isdigit():
+        st.error("NISN atau NIP harus berupa angka.")
+        return
+
+    guru_matches = [
+        item for item in st.session_state.data["guru"]
+        if str(item.get("nip", "")).strip() == normalized
+        and str(item.get("nama", "")).strip()
+        and str(item.get("kode", "")).strip()
+    ]
+
+    siswa_matches = [
+        item for item in st.session_state.data["siswa"]
+        if str(item.get("nisn", "")).strip() == normalized
+        and str(item.get("nama", "")).strip()
+        and str(item.get("kelas", "")).strip()
+    ]
+
+    if len(guru_matches) == 1 and len(siswa_matches) == 0:
+        user, role = guru_matches[0], "Guru"
+    elif len(siswa_matches) == 1 and len(guru_matches) == 0:
+        user, role = siswa_matches[0], "Siswa"
+    else:
+        st.error(
+            "NISN atau NIP tidak ditemukan, datanya tidak lengkap, "
+            "atau nomor terdaftar lebih dari satu."
+        )
+        return
+
+    _masuk(user, role)
+
+
+def _login_admin():
+    st.markdown(
+        '<div class="login-subtitle" style="margin-bottom:.8rem;">'
+        'Masukkan password untuk masuk sebagai administrator.</div>',
+        unsafe_allow_html=True
+    )
+
+    with st.form("admin_login_form"):
+        admin_password = st.text_input(
+            "Password Admin",
+            type="password",
+            placeholder="Masukkan password admin"
+        )
+        submitted = st.form_submit_button(
+            "Masuk sebagai Admin →",
+            type="primary",
+            use_container_width=True
+        )
+
+    if not submitted:
+        return
+
+    if admin_password == ADMIN_PASSWORD:
+        _masuk({"nama": "Administrator"}, "Admin")
+    else:
+        st.error("Password Admin salah.")
+
+
+def _masuk(user, role):
+    st.session_state.user = user
+    st.session_state.role = role
+    st.session_state.screen = "dashboard"
+    st.session_state.pop("guru_nav", None)
+    st.session_state.pop("admin_nav", None)
+    st.rerun()
+
+
 def login_screen():
     st.markdown('<div class="login-page"></div>', unsafe_allow_html=True)
     header()
 
-    center = st.container()
+    with st.container(border=True, key="login_shell"):
+        side_col, form_col = st.columns([1, 1.05], gap="large")
 
-    with center:
-        with st.container(border=True, key="login_shell"):
-            side_col, form_col = st.columns([1, 1.05], gap="large")
+        with side_col:
+            st.markdown(
+                '<div class="login-side">'
+                '<div class="side-badge">SMPN 1 Dawuan</div>'
+                '<div class="side-art">🏫</div>'
+                '<div class="side-title">Dashboard SMPN 1 Dawuan</div>'
+                '<div class="side-text">'
+                'Sistem informasi jadwal pelajaran dan rekap absensi.'
+                '</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
 
-            
-            with side_col:
-                st.markdown(
-                    '<div class="login-side">'
-                    '<div class="side-badge">SMPN 1 Dawuan</div>'
-                    '<div class="side-art">🏫</div>'
-                    '<div class="side-title">Dashboard SMPN 1 Dawuan</div>'
-                    '<div class="side-text">'
-                    'Sistem informasi jadwal pelajaran dan rekap absensi.'
-                    '</div>'
-                    '</div>',
-                    unsafe_allow_html=True
+        with form_col:
+            st.markdown(
+                '<div class="login-panel">'
+                '<div class="login-title-row">'
+                '<div class="login-title-icon">♙</div>'
+                '<div>'
+                '<div class="login-title">Selamat Datang</div>'
+                '<div class="login-subtitle">'
+                'Masukkan NISN untuk siswa atau NIP untuk guru.'
+                '</div>'
+                '</div>'
+                '</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
+
+            with st.form("login_form"):
+                identifier = st.text_input(
+                    "NISN / NIP",
+                    placeholder="Masukkan NISN atau NIP",
+                    key="login_identifier",
+                    max_chars=20
+                )
+                submitted = st.form_submit_button(
+                    "Masuk ke Dashboard →",
+                    type="primary",
+                    use_container_width=True
                 )
 
-           
-            with form_col:
-                st.markdown(
-                    '<div class="login-panel">'
-                    '<div class="login-title-row">'
-                    '<div class="login-title-icon">♙</div>'
-                    '<div>'
-                    '<div class="login-title">Selamat Datang</div>'
-                    '<div class="login-subtitle">'
-                    'Masukkan NISN untuk siswa atau NIP untuk guru.'
-                    '</div>'
-                    '</div>'
-                    '</div>'
-                    '</div>',
-                    unsafe_allow_html=True
+            if not submitted:
+                return
+
+            normalized = identifier.strip()
+
+            if not normalized:
+                st.error("NISN atau NIP wajib diisi.")
+                return
+
+            # Admin: cukup ketik kata sandi admin di kolom ini
+            if normalized == ADMIN_PASSWORD:
+                _masuk({"nama": "Administrator"}, "Admin")
+                return
+
+            if not normalized.isdigit():
+                st.error("NISN atau NIP harus berupa angka.")
+                return
+
+            guru_matches = [
+                item for item in st.session_state.data["guru"]
+                if str(item.get("nip", "")).strip() == normalized
+                and str(item.get("nama", "")).strip()
+                and str(item.get("kode", "")).strip()
+            ]
+
+            siswa_matches = [
+                item for item in st.session_state.data["siswa"]
+                if str(item.get("nisn", "")).strip() == normalized
+                and str(item.get("nama", "")).strip()
+                and str(item.get("kelas", "")).strip()
+            ]
+
+            if len(guru_matches) == 1 and len(siswa_matches) == 0:
+                _masuk(guru_matches[0], "Guru")
+            elif len(siswa_matches) == 1 and len(guru_matches) == 0:
+                _masuk(siswa_matches[0], "Siswa")
+            else:
+                st.error(
+                    "NISN atau NIP tidak ditemukan, datanya tidak lengkap, "
+                    "atau nomor terdaftar lebih dari satu."
                 )
-
-                with st.form("login_form"):
-                    identifier = st.text_input(
-                        "NISN / NIP",
-                        placeholder="Masukkan NISN atau NIP",
-                        key="login_identifier",
-                        max_chars=20
-                    )
-
-                    submitted = st.form_submit_button(
-                        "Masuk ke Dashboard →",
-                        type="primary",
-                        use_container_width=True
-                    )
-
-                if submitted:
-                    normalized = identifier.strip()
-
-                    if not normalized:
-                        st.error("NISN atau NIP wajib diisi.")
-                        return
-
-                    if not normalized.isdigit():
-                        st.error("NISN atau NIP harus berupa angka.")
-                        return
-
-                   
-                    guru_matches = [
-                        item for item in st.session_state.data["guru"]
-                        if str(item.get("nip", "")).strip() == normalized
-                        and str(item.get("nama", "")).strip()
-                        and str(item.get("kode", "")).strip()
-                    ]
-
-                  
-                    siswa_matches = [
-                        item for item in st.session_state.data["siswa"]
-                        if str(item.get("nisn", "")).strip() == normalized
-                        and str(item.get("nama", "")).strip()
-                        and str(item.get("kelas", "")).strip()
-                    ]
-
-                   
-                    if len(guru_matches) == 1 and len(siswa_matches) == 0:
-                        user = guru_matches[0]
-                        role = "Guru"
-
-                    elif len(siswa_matches) == 1 and len(guru_matches) == 0:
-                        user = siswa_matches[0]
-                        role = "Siswa"
-
-                    else:
-                        st.error(
-                            "NISN atau NIP tidak ditemukan, datanya tidak lengkap, "
-                            "atau nomor terdaftar lebih dari satu."
-                        )
-                        return
-
-                   
-                    st.session_state.user = user
-                    st.session_state.role = role
-                    st.session_state.screen = "dashboard"
-                    st.session_state.admin_mode = False
-                    st.session_state.show_admin_login = False
-
-                    
-                    st.session_state.pop("guru_nav", None)
-                    st.session_state.pop("admin_nav", None)
-
-                    st.rerun()
 
 
 # LOGOUT
 def logout():
-    keys_to_clear = [
-        "user",
-        "role",
-        "admin_mode",
-        "show_admin_login",
-        "guru_nav",
-        "admin_nav",
-        "login_identifier"
-    ]
-
-    for key in keys_to_clear:
+    for key in ["user", "role", "guru_nav", "admin_nav", "login_identifier"]:
         st.session_state.pop(key, None)
 
     st.session_state.screen = "login"
@@ -764,26 +828,9 @@ if (
 role = st.session_state.role
 user = st.session_state.user
 
-
-
 dashboard_header(user, role)
 
-
-col_space, col_admin, col_refresh, col_logout = st.columns([4, 2, 2, 1])
-
-with col_admin:
-    if role == "Guru":
-        if st.session_state.admin_mode:
-            
-            if st.button("Matikan Mode Admin", use_container_width=True):
-                st.session_state.admin_mode = False
-                st.session_state.show_admin_login = False
-                st.session_state.pop("admin_nav", None)
-                st.rerun()
-        else:
-            if st.button("Login Admin", use_container_width=True):
-                st.session_state.show_admin_login = not st.session_state.show_admin_login
-                st.rerun()
+col_space, col_refresh, col_logout = st.columns([6, 2, 1])
 
 with col_refresh:
     if st.button("Muat ulang data", use_container_width=True):
@@ -794,46 +841,13 @@ with col_refresh:
 with col_logout:
     if st.button("Keluar", use_container_width=True):
         logout()
-        
 
-if (
-    role == "Guru"
-    and not st.session_state.admin_mode
-    and st.session_state.get("show_admin_login", False)
-):
-    with st.container(border=True, key="card_admin_login"):
-        st.markdown("### Login Administrator")
-
-        with st.form("admin_login_form"):
-            admin_password = st.text_input(
-                "Password Admin",
-                type="password",
-                placeholder="Masukkan password admin"
-            )
-
-            submitted = st.form_submit_button(
-                "Masuk sebagai Admin",
-                type="primary",
-                use_container_width=True
-            )
-
-        if submitted:
-            if admin_password == ADMIN_PASSWORD:
-                st.session_state.admin_mode = True
-                st.session_state.show_admin_login = False
-                st.success("Mode Admin berhasil dibuka.")
-                st.rerun()
-            else:
-                st.error("Password Admin salah.")
-
-
-if role == "Guru" and st.session_state.admin_mode:
-    st.success("Mode Admin aktif")
-
+if role == "Admin":
     menu = [
         "Manajemen Jadwal",
+        "Penugasan",
         "Monitoring Absensi",
-        "Jadwal Pelajaran"
+        "Manajemen Data"
     ]
 
     page = st.radio(
@@ -852,11 +866,10 @@ else:
 
 st.divider()
 
-
 if page == "Jadwal Pelajaran":
     page_heading(
         "Jadwal Pelajaran",
-        "" if role == "Siswa" else "Lihat jadwal pelajaran sekolah.",
+        "Lihat jadwal pelajaran sekolah." if role == "Admin" else "",
         icon="▦"
     )
 elif page == "Jadwal Mengajar":
@@ -864,19 +877,20 @@ elif page == "Jadwal Mengajar":
 else:
     page_heading(page, "Kelola informasi sekolah melalui dashboard.", icon="▦")
 
-
-
 if page == "Manajemen Jadwal":
     admin.manajemen_jadwal()
+
+elif page == "Penugasan":
+    penugasan.penugasan_guru()
 
 elif page == "Monitoring Absensi":
     admin.monitoring_absensi()
 
+elif page == "Manajemen Data":
+    admin.manajemen_data()
+
 elif page == "Jadwal Mengajar":
-    guru.jadwal_mengajar(user if role == "Guru" else None)
+    guru.jadwal_mengajar(user)
 
 elif page == "Jadwal Pelajaran":
-    if role == "Guru" and st.session_state.admin_mode:
-        admin.jadwal_pelajaran()
-    else:
-        siswa.jadwal_pelajaran(user if role == "Siswa" else None)
+    siswa.jadwal_pelajaran(user)

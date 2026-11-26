@@ -96,7 +96,6 @@ ABU_JAM_KOSONG = "E7E7E7"
 
 # FUNGSI BANTU
 def _norm_kelas(kelas):
-    """VII A / 7A -> 7A, VIII B -> 8B, IX C -> 9C"""
     v = str(kelas).upper().replace(" ", "")
     for romawi, angka in (("VIII", "8"), ("VII", "7"), ("IX", "9")):
         if v.startswith(romawi):
@@ -105,7 +104,6 @@ def _norm_kelas(kelas):
 
 
 def _norm_hari(hari):
-    """Jum'at / Jumat / JUM'AT -> jumat"""
     return "".join(ch for ch in str(hari).lower() if ch.isalpha())
 
 
@@ -356,7 +354,7 @@ def buat_excel_jadwal_kbm(
         _gabung(ws, rp + k, ttd_col, rp + k, LAST_COL, teks,
                 h="left", sz=9, border=None, **gaya)
 
-    # ---------- Pengaturan cetak ----------
+  
     ws.page_setup.orientation = "portrait"
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.fitToWidth = 1

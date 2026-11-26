@@ -21,6 +21,7 @@ def _fetch():
         raise RuntimeError(j.get("message", "Gagal mengambil data dari GAS"))
     return j["data"]
 
+
 def get_data():
     d = _fetch()
     absensi = [
@@ -43,3 +44,37 @@ def get_data():
         "absensi": absensi,
         "master": d["master"],
     }
+
+
+def _post(action, payload):
+    r = requests.post(
+        st.secrets["GAS_URL"],
+        params={"action": action},
+        json={"key": st.secrets["GAS_KEY"], **payload},
+        timeout=90,
+    )
+    r.raise_for_status()
+    try:
+        j = r.json()
+    except ValueError:
+        raise RuntimeError(
+            "Apps Script tidak mengembalikan JSON. Pastikan sudah Deploy "
+            f"> New version. Awal respons: {r.text[:200]}"
+        )
+    if not j.get("success"):
+        raise RuntimeError(j.get("message", "Gagal menyimpan ke server"))
+
+    _fetch.clear()  
+    return j
+
+
+def simpan_jadwal(rows):
+    return _post("save_jadwal", {"rows": rows})
+
+
+def simpan_penugasan(rows):
+    return _post("save_penugasan", {"rows": rows})
+
+
+def simpan_data(jenis, rows):
+    return _post(f"save_{jenis}", {"rows": rows})

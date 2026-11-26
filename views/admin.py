@@ -3,6 +3,7 @@ import pandas as pd
 from io import BytesIO
 from utils.excel_jadwal_kbm import buat_excel_jadwal_kbm
 from utils.filter_absensi import filter_absensi, urut_kelas
+from services.gas_client import simpan_jadwal, simpan_data
 
 
 
@@ -282,6 +283,13 @@ def manajemen_jadwal():
 
     rows = st.session_state.data["jadwal"]
 
+    ringkasan_admin()
+
+    if rows:
+        with st.container(border=True, key="card_grafik_beban_guru"):
+            st.markdown("### Beban Jam Mengajar per Guru")
+            grafik_beban_guru()
+
     
 
     with st.container(border=True, key="card_daftar_jadwal"):
@@ -292,7 +300,7 @@ def manajemen_jadwal():
             st.info("Belum ada jadwal.")
         else:
 
-            # ---------- FILTER: NAMA GURU DAN KELAS ----------
+           
             guru_opsi = ["Semua"] + sorted(
                 {str(r.get("guru", "")) for r in rows if r.get("guru")}
             )
@@ -361,7 +369,7 @@ def manajemen_jadwal():
                 st.info("Tidak ada jadwal yang cocok dengan filter.")
             else:
 
-                # Header tabel
+              
                 header = st.columns(
                     [0.8, 1.1, 0.7, 1.4, 1.1, 1.1, 0.7, 0.6, 1.0],
                     gap="small"
@@ -385,7 +393,7 @@ def manajemen_jadwal():
                         gap="small"
                     )
 
-                    # Kolom data jadwal
+                 
                     values = [
                         row.get("hari", "-"),
                         row.get("waktu", "-"),
@@ -410,12 +418,19 @@ def manajemen_jadwal():
 
                         deleted = rows.pop(idx)
 
-                        st.toast(
-                            f"Jadwal {deleted['kelas']} - "
-                            f"{deleted['mapel']} berhasil dihapus."
-                        )
-
-                        st.rerun()
+                        try:
+                            with st.spinner("Menghapus jadwal..."):
+                                simpan_jadwal(rows)
+                        except Exception as e:
+                        
+                            rows.insert(idx, deleted)
+                            st.error(f"Gagal menghapus di server: {e}")
+                        else:
+                            st.toast(
+                                f"Jadwal {deleted['kelas']} - "
+                                f"{deleted['mapel']} berhasil dihapus."
+                            )
+                            st.rerun()
 
                     st.divider()
 
@@ -511,9 +526,19 @@ def manajemen_jadwal():
                     "jam_ke": int(jam_ke),
                     "kode": int(guru["kode"])
                 })
-                st.toast("Jadwal berhasil ditambahkan.")
-                st.rerun()
 
+                try:
+                    with st.spinner("Menyimpan jadwal..."):
+                        simpan_jadwal(data["jadwal"])
+                except Exception as e:
+                  
+                    data["jadwal"].pop()
+                    st.error(f"Gagal menyimpan ke server: {e}")
+                else:
+                    st.toast("Jadwal berhasil ditambahkan.")
+                    st.rerun()
+
+    _tombol_unduh()
 
 
 
@@ -616,62 +641,16 @@ def export_jadwal(user=None, role="Admin"):
 
 
 
-def jadwal_pelajaran():
-
-    st.caption(
-        ""
-    )
-
-    ringkasan_admin()
-
-   
-    df_all = pd.DataFrame(
-        st.session_state.data["jadwal"]
-    )
+def _tombol_unduh():
+    df_all = pd.DataFrame(st.session_state.data["jadwal"])
 
     if df_all.empty:
-        st.info("Belum ada jadwal pelajaran.")
         return
-
-   
-    with st.container(border=True, key="card_grafik_beban_guru"):
-        st.markdown("### Beban Jam Mengajar per Guru")
-        grafik_beban_guru()
-
-  
-    kelas_options = ["Semua"] + sorted(
-        df_all["kelas"].dropna().unique().tolist()
-    )
-
-    selected = st.selectbox(
-        "Filter kelas",
-        kelas_options
-    )
-
-    df_display = df_all.copy()
-
-    if selected != "Semua":
-
-        df_display = df_display[
-            df_display["kelas"] == selected
-        ]
-
-
-    st.dataframe(
-        df_display[
-            ["hari", "waktu", "kelas", "mapel", "guru", "jam_ke"]
-        ],
-        use_container_width=True,
-        hide_index=True
-    )
 
     st.divider()
 
-    
     output = BytesIO()
-
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-
         df_all.to_excel(
             writer,
             index=False,
@@ -691,8 +670,8 @@ def jadwal_pelajaran():
         guru=st.session_state.data["guru"],
         tahun_mulai=2026,
         semester="GANJIL",
-        logo_kiri="assets/logo_kiri.png",    
-        logo_kanan="assets/logo_kanan.png",  
+        logo_kiri="assets/logo_kiri.png",
+        logo_kanan="assets/logo_kanan.png",
     )
 
     st.download_button(
@@ -700,4 +679,220 @@ def jadwal_pelajaran():
         data=excel_kbm,
         file_name="Jadwal_KBM_SMPN_1_Dawuan.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
     )
+
+
+# ---------- Manajemen Data ----------
+KONFIG_DATA = {
+    "siswa": {
+        "judul": "Data Siswa",
+        "kolom": {"kelas": "Kelas", "nisn": "NISN", "nama": "Nama"},
+        "wajib": ["kelas", "nisn", "nama"],
+        "angka": ["nisn"],
+        "unik": ["nisn"],
+        "sheet": "Siswa",
+        "file": "Template_Data_Siswa.xlsx",
+    },
+    "guru": {
+        "judul": "Data Guru",
+        "kolom": {"nip": "NIP", "nama": "Nama", "kode": "Kode"},
+        "wajib": ["kode", "nama"],
+        "angka": ["kode", "nip"],
+        "unik": ["kode", "nip"],
+        "sheet": "Guru",
+        "file": "Template_Data_Guru.xlsx",
+    },
+}
+
+DATA_PER_HALAMAN = 10
+MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _buat_template(kolom, nama_sheet):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        pd.DataFrame(columns=kolom).to_excel(
+            writer, index=False, sheet_name=nama_sheet
+        )
+        ws = writer.sheets[nama_sheet]
+        for col in ws.columns:
+            ws.column_dimensions[col[0].column_letter].width = 26
+    return output.getvalue()
+
+
+def _ganti_halaman(key, delta):
+    st.session_state[key] = st.session_state.get(key, 1) + delta
+
+
+def _baca_import(file, jenis):
+    cfg = KONFIG_DATA[jenis]
+
+    try:
+        df = pd.read_excel(file, dtype=str)
+    except Exception as e:
+        return None, [f"File tidak dapat dibaca: {e}"]
+
+    df.columns = [str(c).strip() for c in df.columns]
+    peta = {c.lower(): c for c in df.columns}
+    label = list(cfg["kolom"].values())
+
+    hilang = [l for l in label if l.lower() not in peta]
+    if hilang:
+        return None, [
+            f"Kolom tidak ditemukan: {', '.join(hilang)}. "
+            "Gunakan template yang disediakan."
+        ]
+
+    df = df[[peta[l.lower()] for l in label]]
+    df.columns = list(cfg["kolom"].keys())
+    df = df.fillna("").astype(str).apply(lambda s: s.str.strip())
+
+    for k in cfg["angka"]:
+        df[k] = df[k].str.replace(r"\.0$", "", regex=True)
+
+    df = df[(df != "").any(axis=1)]
+    if df.empty:
+        return None, ["File tidak berisi data."]
+
+    err = []
+    for i, r in df.iterrows():
+        baris = i + 2  
+        for k in cfg["wajib"]:
+            if not r[k]:
+                err.append(f"Baris {baris}: kolom {cfg['kolom'][k]} kosong.")
+        for k in cfg["angka"]:
+            if r[k] and not r[k].isdigit():
+                err.append(f"Baris {baris}: {cfg['kolom'][k]} harus berupa angka.")
+
+    for k in cfg["unik"]:
+        isi = df[k][df[k] != ""]
+        dobel = isi[isi.duplicated()].unique()
+        if len(dobel):
+            err.append(
+                f"{cfg['kolom'][k]} ganda: {', '.join(list(dobel)[:5])}"
+            )
+
+    if err:
+        return None, err
+
+    rows = df.to_dict("records")
+    if jenis == "guru":
+        for r in rows:
+            r["kode"] = int(r["kode"])
+    return rows, []
+
+
+def _bagian_data(jenis):
+    cfg = KONFIG_DATA[jenis]
+    kunci = list(cfg["kolom"].keys())
+    label = list(cfg["kolom"].values())
+
+    key_hal = f"hal_data_{jenis}"
+    key_ver = f"ver_upload_{jenis}"
+    st.session_state.setdefault(key_hal, 1)
+    st.session_state.setdefault(key_ver, 0)
+
+    rows = st.session_state.data.get(jenis, [])
+    df = pd.DataFrame(rows)
+    for k in kunci:
+        if k not in df.columns:
+            df[k] = ""
+    df = df[kunci].rename(columns=cfg["kolom"])
+
+    total = len(df)
+    jumlah_halaman = max(1, -(-total // DATA_PER_HALAMAN))
+    st.session_state[key_hal] = min(max(1, st.session_state[key_hal]), jumlah_halaman)
+    hal = st.session_state[key_hal]
+
+    with st.container(border=True, key=f"card_data_{jenis}"):
+        st.markdown(f"### {cfg['judul']}")
+
+        if total == 0:
+            st.info("Belum ada data.")
+        else:
+            awal = (hal - 1) * DATA_PER_HALAMAN
+            tampil = df.iloc[awal:awal + DATA_PER_HALAMAN].copy()
+            tampil.insert(0, "No", range(awal + 1, awal + len(tampil) + 1))
+            st.dataframe(tampil, use_container_width=True, hide_index=True)
+
+            p1, p2, p3 = st.columns([1, 2, 1])
+            p1.button(
+                "‹ Sebelumnya", key=f"prev_{jenis}",
+                disabled=hal <= 1, use_container_width=True,
+                on_click=_ganti_halaman, args=(key_hal, -1)
+            )
+            p2.markdown(
+                f"<div style='text-align:center;padding-top:.45rem;'>"
+                f"Halaman {hal} dari {jumlah_halaman} "
+                f"({total} data)</div>",
+                unsafe_allow_html=True
+            )
+            p3.button(
+                "Berikutnya ›", key=f"next_{jenis}",
+                disabled=hal >= jumlah_halaman, use_container_width=True,
+                on_click=_ganti_halaman, args=(key_hal, 1)
+            )
+
+        st.divider()
+
+        c1, c2 = st.columns(2)
+
+        c1.download_button(
+            f"Unduh Template {cfg['judul']}",
+            data=_buat_template(label, cfg["sheet"]),
+            file_name=cfg["file"],
+            mime=MIME_XLSX,
+            use_container_width=True,
+            key=f"template_{jenis}"
+        )
+
+        with c2.popover("Import Data", use_container_width=True):
+            st.caption(
+                f"Pilih file Excel (.xlsx) dengan kolom: {', '.join(label)}."
+            )
+            file = st.file_uploader(
+                "File Excel",
+                type=["xlsx"],
+                key=f"upload_{jenis}_{st.session_state[key_ver]}",
+                label_visibility="collapsed"
+            )
+
+        if file is not None:
+            hasil, err = _baca_import(file, jenis)
+
+            if err:
+                st.error(
+                    "Import dibatalkan:\n\n"
+                    + "\n".join(f"- {e}" for e in err[:10])
+                    + (f"\n- ...dan {len(err) - 10} masalah lain." if len(err) > 10 else "")
+                )
+            else:
+                st.info(
+                    f"File **{file.name}** berisi {len(hasil)} data. "
+                    f"{cfg['judul']} saat ini ({total} data) akan diganti seluruhnya."
+                )
+                if st.button(
+                    f"Ganti {cfg['judul']} dengan file ini",
+                    type="primary", key=f"terapkan_{jenis}"
+                ):
+                    try:
+                        with st.spinner(f"Menyimpan {cfg['judul']}..."):
+                            simpan_data(jenis, hasil)
+                    except Exception as e:
+                        st.error(f"Gagal menyimpan ke server: {e}")
+                    else:
+                        if jenis == "guru":
+                           
+                            st.session_state.pop("data", None)
+                        else:
+                            st.session_state.data[jenis] = hasil
+                        st.session_state[key_hal] = 1
+                        st.session_state[key_ver] += 1
+                        st.toast(f"{cfg['judul']} berhasil diganti ({len(hasil)} data).")
+                        st.rerun()
+
+
+def manajemen_data():
+    _bagian_data("siswa")
+    _bagian_data("guru")
